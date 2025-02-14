@@ -71,24 +71,17 @@ def add_customer():
     last_name = data.get("last_name")
     email = data.get("email")
 
-    if not first_name or not last_name or not email:
-        return jsonify({"error": "All fields are required"}), 400
+    if not first_name or not last_name:
+        return jsonify({"error": "First and lasr name are required"}), 400
 
     try:
-        cursor.execute("SELECT MAX(customer_id) FROM customer")
-        max_customer_id = cursor.fetchone()[0]
-        next_customer_id = max_customer_id + 1 if max_customer_id else 1
-        print(f"Next Customer ID: {next_customer_id}")
         store_id = 1
         address_id = 180
         #active = 1
-
-        print('good ere')
         cursor.execute(
             "INSERT INTO customer (store_id, first_name, last_name, email, address_id) VALUES (%s, %s, %s, %s, %s)",
             (store_id, first_name, last_name, email, address_id)
         )
-        print('maybe n')
         db.commit()
 
         return jsonify({"message": "Customer added successfully"}), 201
@@ -99,7 +92,24 @@ def add_customer():
     finally:
         cursor.close()
 
+@app.route("/delete-customer", methods=["POST"])
+def delete_customer():
+    try:
+        data = request.json
+        cus_id = data.get("customer_id")
 
+        if not cus_id:
+            return jsonify({"error": "Customer ID is required"}), 400
+
+        cursor = db.cursor()
+        cursor.execute("DELETE FROM customer WHERE customer_id = %s", (cus_id,))
+        db.commit()
+        cursor.close()
+
+        return jsonify({"message": "Customer deleted successfully"}), 200
+    except Exception as e:
+        db.rollback()
+        return jsonify({"error": str(e)}), 500
 
 @app.route("/test-db")
 def test_db():
