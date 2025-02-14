@@ -33,14 +33,14 @@ def get_customers():
 
     if search_query.isdigit():  # If searching by customer ID
         cursor.execute("""
-            SELECT customer_id, first_name, last_name 
+            SELECT customer_id, first_name, last_name, email
             FROM customer 
             WHERE customer_id = %s 
             LIMIT %s OFFSET %s;
         """, (search_query, limit, offset))
     else:  # If searching by first or last name
         cursor.execute("""
-            SELECT customer_id, first_name, last_name 
+            SELECT customer_id, first_name, last_name, email
             FROM customer 
             WHERE first_name LIKE %s OR last_name LIKE %s
             LIMIT %s OFFSET %s;
@@ -110,6 +110,47 @@ def delete_customer():
     except Exception as e:
         db.rollback()
         return jsonify({"error": str(e)}), 500
+    
+@app.route("/update-customer", methods=["POST"])
+def update_customer():
+    try:
+        data = request.json
+        customer_id = data.get("customer_id")
+        first_name = data.get("first_name", None)
+        last_name = data.get("last_name", None)
+        email = data.get("email", None)
+
+        if not customer_id:
+            return jsonify({"error": "Customer ID is required"}), 400
+
+        update_fields = []
+        params = []
+
+        if first_name:
+            update_fields.append("first_name = %s")
+            params.append(first_name)
+        if last_name:
+            update_fields.append("last_name = %s")
+            params.append(last_name)
+        if email:
+            update_fields.append("email = %s")
+            params.append(email)
+
+        if not update_fields:
+            return jsonify({"error": "No fields provided for update"}), 400
+
+        params.append(customer_id)
+        cursor = db.cursor()
+        cursor.execute(f"UPDATE customer SET {', '.join(update_fields)} WHERE customer_id = %s", tuple(params))
+        db.commit()
+        cursor.close()
+
+        return jsonify({"message": "Customer updated successfully"}), 200
+
+    except Exception as e:
+        db.rollback()
+        return jsonify({"error": str(e)}), 500
+
 
 @app.route("/test-db")
 def test_db():
