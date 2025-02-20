@@ -151,6 +151,31 @@ def update_customer():
         db.rollback()
         return jsonify({"error": str(e)}), 500
 
+@app.route("/customer-rental-history/<int:customer_id>", methods=["GET"])
+def get_customer_rental_history(customer_id):
+    cursor = db.cursor(dictionary=True)
+
+    cursor.execute("""
+        SELECT 
+            r.rental_id,
+            f.title, 
+            r.rental_date, 
+            r.return_date,
+            CASE 
+                WHEN r.return_date IS NULL THEN 'No' 
+                ELSE 'Yes' 
+            END AS returned
+        FROM rental r
+        JOIN inventory i ON r.inventory_id = i.inventory_id
+        JOIN film f ON i.film_id = f.film_id
+        WHERE r.customer_id = %s
+        ORDER BY r.rental_date DESC;
+    """, (customer_id,))
+
+    rental_history = cursor.fetchall()
+    cursor.close()
+
+    return jsonify({"rental_history": rental_history})
 
 @app.route("/test-db")
 def test_db():
