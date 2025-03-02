@@ -185,6 +185,57 @@ def test_db():
         return jsonify({"message": "Database connected!", "database": db_name[0]})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+@app.route("/search-films", methods=["GET"])
+def get_films():
+    search_query = request.args.get("search", "", type=str)
+    page = request.args.get("page", 1, type=int)  # Default to page 1
+    limit = request.args.get("limit", 10, type=int)  # Default 10 films per page
+    offset = (page - 1) * limit  # Calculate offset for pagination
+
+    cursor = db.cursor(dictionary=True)
+
+    if search_query:
+        query = """
+        SELECT DISTINCT f.film_id, f.title, f.description, f.release_year, f.rating, c.name AS category
+        FROM film f
+        JOIN film_category fc ON f.film_id = fc.film_id
+        JOIN film_actor fa ON f.film_id = fa.film_id
+        JOIN actor a ON fa.actor_id = a.actor_id
+        JOIN category c ON fc.category_id = c.category_id
+        WHERE f.title LIKE %s
+        OR c.name LIKE %s
+        OR CONCAT(a.first_name, ' ', a.last_name) LIKE %s
+        LIMIT %s OFFSET %s
+        """
+        wildcard_search = f"%{search_query}%"
+        cursor.execute(query, (wildcard_search, wildcard_search, wildcard_search, limit, offset))
+    else:
+        query = """
+        SELECT DISTINCT f.film_id, f.title, f.description, f.release_year, f.rating, c.name AS category
+        FROM film f
+        LEFT JOIN film_category fc ON f.film_id = fc.film_id
+        LEFT JOIN category c ON fc.category_id = c.category_id
+        LIMIT %s OFFSET %s
+        """
+        
+        cursor.execute(query, (limit, offset))
+
+    films = cursor.fetchall()
+
+    # Get total count of films (for pagination)
+    count_query = "SELECT COUNT(*) AS total FROM film"
+    cursor.execute(count_query)
+    total_films = cursor.fetchone()["total"]
+
+    cursor.close()
+
+    return jsonify({"films": films, "total": total_films, "page": page, "limit": limit})
+
+
+
+
+
 '''
 @app.route("/test-actor")
 def test_actor():
