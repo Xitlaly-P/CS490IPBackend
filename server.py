@@ -197,7 +197,11 @@ def get_films():
 
     if search_query:
         query = """
-        SELECT DISTINCT f.film_id, f.title, f.description, f.release_year, f.rating, c.name AS category
+        SELECT f.film_id, f.title, f.description, f.release_year, f.rating, c.name AS category,
+               (SELECT COUNT(i.inventory_id) 
+                FROM inventory i
+                LEFT JOIN rental r ON i.inventory_id = r.inventory_id AND r.return_date IS NULL
+                WHERE i.film_id = f.film_id AND i.store_id = 1 AND r.inventory_id IS NULL) AS available_copies
         FROM film f
         JOIN film_category fc ON f.film_id = fc.film_id
         JOIN film_actor fa ON f.film_id = fa.film_id
@@ -212,7 +216,11 @@ def get_films():
         cursor.execute(query, (wildcard_search, wildcard_search, wildcard_search, limit, offset))
     else:
         query = """
-        SELECT DISTINCT f.film_id, f.title, f.description, f.release_year, f.rating, c.name AS category
+        SELECT f.film_id, f.title, f.description, f.release_year, f.rating, c.name AS category,
+               (SELECT COUNT(i.inventory_id) 
+                FROM inventory i
+                LEFT JOIN rental r ON i.inventory_id = r.inventory_id AND r.return_date IS NULL
+                WHERE i.film_id = f.film_id AND i.store_id = 1 AND r.inventory_id IS NULL) AS available_copies
         FROM film f
         LEFT JOIN film_category fc ON f.film_id = fc.film_id
         LEFT JOIN category c ON fc.category_id = c.category_id
@@ -231,6 +239,65 @@ def get_films():
     cursor.close()
 
     return jsonify({"films": films, "total": total_films, "page": page, "limit": limit})
+
+@app.route("/available-films", methods=["GET"])
+def get_available_films():
+    cursor = db.cursor(dictionary=True)
+
+    query = """
+    SELECT f.film_id, f.title, f.description, f.release_year, f.rating, c.name AS category, COUNT(i.inventory_id) AS available_copies
+    FROM film f
+    JOIN film_category fc ON f.film_id = fc.film_id
+    JOIN category c ON fc.category_id = c.category_id
+    JOIN inventory i ON f.film_id = i.film_id
+    LEFT JOIN rental r ON i.inventory_id = r.inventory_id AND r.return_date IS NULL
+    WHERE i.store_id = 1 AND r.inventory_id IS NULL
+    GROUP BY f.film_id, f.title, f.description, f.release_year, f.rating, c.name;
+    """
+    
+    cursor.execute(query)
+    films = cursor.fetchall()
+    cursor.close()
+    
+    return jsonify(films)
+
+
+@app.route("/rent-film", methods=["POST"])
+def rent_film():
+    data = request.json
+    film_id = data.get("film_id")
+    customer_id = data.get("customer_id")
+    staff_id = 1  # Assuming Store 1's staff handles rentals
+
+    cursor = db.cursor(dictionary=True)
+
+    # Find an available inventory_id for this film
+    find_inventory_query = """
+    SELECT i.inventory_id 
+    FROM inventory i
+    LEFT JOIN rental r ON i.inventory_id = r.inventory_id AND r.return_date IS NULL
+    WHERE i.film_id = %s AND i.store_id = 1 AND r.inventory_id IS NULL
+    LIMIT 1;
+    """
+    cursor.execute(find_inventory_query, (film_id,))
+    available_inventory = cursor.fetchone()
+
+    if not available_inventory:
+        return jsonify({"success": False, "message": "No available copies"}), 400
+
+    inventory_id = available_inventory["inventory_id"]
+
+    # Insert into rental table
+    rent_query = """
+    INSERT INTO rental (rental_date, inventory_id, customer_id, staff_id, last_update)
+    VALUES (NOW(), %s, %s, %s, NOW());
+    """
+    cursor.execute(rent_query, (inventory_id, customer_id, staff_id))
+    db.commit()
+    cursor.close()
+
+    return jsonify({"success": True, "message": "Rental successful!"})
+
 
 
 
