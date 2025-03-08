@@ -10,7 +10,6 @@ load_dotenv()
 app = Flask(__name__)
 CORS(app)
 
-
 # MySQL Configuration
 db = mysql.connector.connect(
     host=os.getenv("MYSQL_HOST"),
@@ -20,15 +19,14 @@ db = mysql.connector.connect(
 )
 cursor = db.cursor()
 
-
 def get_db_connection():
     """Function to get a new database connection."""
     try:
         connection = mysql.connector.connect(
-            host=os.getenv("MYSQL_HOST"),
-            user=os.getenv("MYSQL_USER"),
-            password=os.getenv("MYSQL_PASSWORD"),
-            database=os.getenv("MYSQL_DATABASE")
+            host='localhost',  # Your DB host
+            user='root',       # Your DB user
+            password='password',  # Your DB password
+            database='your_database'  # Your DB name
         )
         return connection
     except Error as e:
@@ -316,33 +314,28 @@ def rent_film():
     return jsonify({"success": True, "message": "Rental successful!"})
 
 
+
 @app.route("/top-actors", methods=["GET"])
 def get_top_actors():
-    # Get a new database connection
-    connection = get_db_connection()
-    if connection is None:
-        return jsonify({"error": "Database connection failed"}), 500
-
-    cursor = connection.cursor(dictionary=True)
-
-    # Query to fetch the top actors based on rental count
+    cursor = db.cursor(dictionary=True)
+    
+    # Query to fetch the top actors based on rental count (you may need to adjust the query as per your requirements)
     query = """
         SELECT a.actor_id, a.first_name, a.last_name, COUNT(*) AS movies
-        FROM film f
-        JOIN film_actor b ON f.film_id = b.film_id
-        JOIN actor a ON b.actor_id = a.actor_id
+        FROM film f, film_actor b, actor a
+        WHERE f.film_id = b.film_id AND b.actor_id = a.actor_id
         GROUP BY a.actor_id
         ORDER BY movies DESC
         LIMIT 5;
     """
-
+    
     cursor.execute(query)
     actors = cursor.fetchall()
-
+    
     # Now, for each actor, fetch their top 5 rented films
     for actor in actors:
         actor_id = actor['actor_id']
-
+        
         # Query to fetch the top 5 rented films for the current actor
         film_query = """
         SELECT f.film_id, f.title, COUNT(*) AS rental_count
@@ -355,26 +348,20 @@ def get_top_actors():
         ORDER BY rental_count DESC
         LIMIT 5;
         """
-
+        
         cursor.execute(film_query, (actor_id,))
         top_films = cursor.fetchall()
-
+        
         # Add the top films to each actor
         actor['top_films'] = top_films
-
+    
     cursor.close()
-    connection.close()  # Close the connection after use
     return jsonify(actors)
 
 @app.route("/top-movies", methods=["GET"])
 def get_top_movies():
-    # Get a new database connection
-    connection = get_db_connection()
-    if connection is None:
-        return jsonify({"error": "Database connection failed"}), 500
-
-    cursor = connection.cursor(dictionary=True)
-
+    cursor = db.cursor(dictionary=True)
+    
     # Query to get the top 5 most rented movies
     query = """
         SELECT f.film_id, f.title, f.description, f.release_year, f.rating, COUNT(*) AS rented_count
@@ -385,15 +372,12 @@ def get_top_movies():
         ORDER BY rented_count DESC
         LIMIT 5;
     """
-
+    
     cursor.execute(query)
     top_movies = cursor.fetchall()
-
+    
     cursor.close()
-    connection.close()  # Close the connection after use
     return jsonify(top_movies)
-
-
 
 '''
 @app.route("/test-actor")
